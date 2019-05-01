@@ -1,0 +1,5 @@
+name: Inline Entity Form
+type: module
+description: 'Provides functionality for inline management (creation, modification, removal) of entities.'
+package: Fields
+core: 8.x
