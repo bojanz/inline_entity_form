@@ -1,0 +1,7 @@
+field.widget.settings.inline_entity_form_embedded:
+  type: mapping
+  label: 'Inline Entity Form - Embedded widget settings'
+  mapping:
+    form_mode:
+      type: string
+      label: 'Form mode'
