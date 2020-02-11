@@ -109,6 +109,7 @@ abstract class InlineFormBase extends PluginBase implements InlineFormInterface,
    * {@inheritdoc}
    */
   public function buildInlineForm(array $inline_form, FormStateInterface $form_state) {
+    $inline_form['#tree'] = TRUE;
     $inline_form['#theme_wrappers'] = ['container'];
     // Workaround for core bug #2897377.
     $inline_form['#id'] = Html::getId('edit-' . implode('-', $inline_form['#parents']));
@@ -118,6 +119,8 @@ abstract class InlineFormBase extends PluginBase implements InlineFormInterface,
     $inline_form['#element_validate'][] = [ElementSubmit::class, 'validateParentForm'];
     $inline_form['#element_validate'][] = [get_class($this), 'runValidate'];
     $inline_form['#inline_entity_element_submit'][] = [get_class($this), 'runSubmit'];
+    // Allow inline forms to be altered.
+    $inline_form['#process'][] = [get_class($this), 'alterInlineForm'];
     // Allow inline forms to modify the page title.
     $inline_form['#process'][] = [get_class($this), 'updatePageTitle'];
 
@@ -160,6 +163,32 @@ abstract class InlineFormBase extends PluginBase implements InlineFormInterface,
     /** @var \Drupal\inline_entity_form\Plugin\InlineForm\InlineFormInterface $plugin */
     $plugin = $inline_form['#inline_form'];
     $plugin->submitInlineForm($inline_form, $form_state);
+  }
+
+  /**
+   * Alters the inline form.
+   *
+   * @param array $inline_form
+   *   The inline form.
+   * @param \Drupal\Core\Form\FormStateInterface $form_state
+   *   The current state of the form.
+   * @param array $complete_form
+   *   The complete form structure.
+   *
+   * @return array
+   *   The form element.
+   */
+  public static function alterInlineForm(array &$inline_form, FormStateInterface $form_state, array &$complete_form) {
+    /** @var \Drupal\inline_entity_form\Plugin\InlineForm\InlineFormInterface $plugin */
+    $plugin = $inline_form['#inline_form'];
+    // Invoke hook_inline_form_alter() and hook_inline_form_PLUGIN_ID_alter().
+    $hooks = [
+      'inline_form',
+      'inline_form_' . $plugin->getPluginId(),
+    ];
+    \Drupal::moduleHandler()->alter($hooks, $inline_form, $form_state, $complete_form);
+
+    return $inline_form;
   }
 
   /**

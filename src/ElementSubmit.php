@@ -6,14 +6,13 @@ use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Render\Element;
 
 /**
- * Provides support for #inline_entity_element_submit.
+ * Allows form elements to use #inline_entity_element_submit.
  *
- * Simulates the #element_submit that Drupal core is missing.
- * See https://www.drupal.org/project/drupal/issues/2820359.
+ * This is a substitute for the #element_submit that's missing from Drupal core.
  *
  * If the parent form has multiple submit buttons, the element submit
- * callbacks will only be invoked when the form is submitted via the
- * primary submit button (#button_type => primary).
+ * callbacks will only be invoked when the form is submitted through a
+ * submit button with a #button_type of 'primary' or 'secondary'.
  * This prevents irreversible changes from being applied for submit buttons
  * which only rebuild the form (e.g. "Upload file" or "Add another item").
  */
@@ -60,8 +59,8 @@ trait ElementSubmit {
   public static function validateParentForm(array &$element, FormStateInterface $form_state) {
     // Button-level #validate handlers replace the form-level ones, which means
     // that executeElementSubmitHandlers() won't be triggered.
-    if ($handlers = $form_state->getValidateHandlers()) {
-      throw new \Exception('The current form must not have button-level #validate handlers');
+    if (self::shouldExecuteElementSubmit($form_state) && $form_state->getValidateHandlers()) {
+      throw new \Exception('The triggering element must not have #validate handlers');
     }
   }
 
@@ -80,19 +79,41 @@ trait ElementSubmit {
    *   The form state.
    */
   public static function executeElementSubmitHandlers(array &$form, FormStateInterface $form_state) {
+    if (self::shouldExecuteElementSubmit($form_state)) {
+      self::doExecuteSubmitHandlers($form, $form_state);
+    }
+  }
+
+  /**
+   * Checks whether #inline_entity_element_submit callbacks should be executed.
+   *
+   * @param \Drupal\Core\Form\FormStateInterface $form_state
+   *   The form state.
+   *
+   * @return bool
+   *   TRUE if the callbacks can be executed, FALSE otherwise.
+   */
+  protected static function shouldExecuteElementSubmit(FormStateInterface $form_state) {
     if (!$form_state->isSubmitted() || $form_state->hasAnyErrors()) {
       // The form wasn't submitted (#ajax in progress) or failed validation.
-      return;
+      return FALSE;
+    }
+    if (count($form_state->getButtons()) === 1) {
+      // The form has only one button, no need to guess if it was clicked.
+      return TRUE;
     }
     $triggering_element = $form_state->getTriggeringElement();
     $button_type = isset($triggering_element['#button_type']) ? $triggering_element['#button_type'] : '';
-    if ($button_type != 'primary' && count($form_state->getButtons()) > 1) {
-      // The form was submitted, but not via the primary button, which
-      // indicates that it will probably be rebuilt.
-      return;
+    if (in_array($button_type, ['primary', 'secondary'])) {
+      // Invoke callbacks only for submit buttons with a known #button_type.
+      // Buttons without a #button_type usually rebuild the form.
+      // The 'secondary' #button_type was invented by Commerce for buttons
+      // which behave like a primary button (e.g. saving the entity), but
+      // shouldn't have the styling of a primary button.
+      return TRUE;
     }
 
-    self::doExecuteSubmitHandlers($form, $form_state);
+    return FALSE;
   }
 
   /**
@@ -103,7 +124,7 @@ trait ElementSubmit {
    * @param \Drupal\Core\Form\FormStateInterface $form_state
    *   The form state.
    */
-  public static function doExecuteSubmitHandlers(array &$element, FormStateInterface $form_state) {
+  protected static function doExecuteSubmitHandlers(array &$element, FormStateInterface $form_state) {
     // Recurse through all children.
     foreach (Element::children($element) as $key) {
       if (!empty($element[$key])) {
